@@ -125,6 +125,12 @@ enum UrgencyLevel {
   HIGH
 }
 
+enum ChangeType {
+  ABSENCE      // Ausencia - no trabajar ese día
+  SWAP         // Cambio a otro turno
+  COVERAGE     // Buscar cobertura de otro compañero
+}
+
 // ============================================
 // AUTH & USERS
 // ============================================
@@ -268,6 +274,7 @@ model ShiftType {
   requirements      ShiftRequirement[]
   preferenceEntries PreferenceEntry[]
   scheduleEntries   ScheduleEntry[]
+  changeRequests    ShiftChangeRequest[]
 
   @@map("shift_types")
 }
@@ -399,24 +406,27 @@ model ScheduleEntry {
 // ============================================
 
 model ShiftChangeRequest {
-  id              String              @id @default(cuid())
-  requesterId     String
-  scheduleEntryId String
-  status          ChangeRequestStatus @default(PENDING)
-  reason          String?             @db.Text
-  urgency         UrgencyLevel        @default(MEDIUM)
-  validUntil      DateTime?
-  autoSelect      Boolean             @default(false)
-  adminNotes      String?             @db.Text
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id                String              @id @default(cuid())
+  requesterId       String
+  scheduleEntryId   String
+  changeType        ChangeType          @default(COVERAGE)
+  targetShiftTypeId String?             // Para SWAP: a qué turno quiere cambiar
+  status            ChangeRequestStatus @default(PENDING)
+  reason            String?             @db.Text
+  urgency           UrgencyLevel        @default(MEDIUM)
+  validUntil        DateTime?
+  autoSelect        Boolean             @default(false)
+  adminNotes        String?             @db.Text
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   // Relaciones
-  requester     EmployeeProfile     @relation(fields: [requesterId], references: [id])
-  scheduleEntry ScheduleEntry       @relation(fields: [scheduleEntryId], references: [id])
-  offers        CoverageOffer[]
-  result        ShiftChangeResult?
-  approvals     ChangeApproval[]
+  requester       EmployeeProfile     @relation(fields: [requesterId], references: [id])
+  scheduleEntry   ScheduleEntry       @relation(fields: [scheduleEntryId], references: [id])
+  targetShiftType ShiftType?          @relation(fields: [targetShiftTypeId], references: [id])
+  offers          CoverageOffer[]
+  result          ShiftChangeResult?
+  approvals       ChangeApproval[]
 
   @@map("shift_change_requests")
 }

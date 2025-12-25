@@ -91,6 +91,18 @@ const adminItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
+    title: "Gestionar Cambios",
+    href: "/admin/changes",
+    icon: ArrowLeftRight,
+    roles: ["ADMIN", "SUPERVISOR"],
+  },
+  {
+    title: "Gestionar Vacaciones",
+    href: "/admin/vacations",
+    icon: Palmtree,
+    roles: ["ADMIN", "SUPERVISOR"],
+  },
+  {
     title: "Estadísticas",
     href: "/admin/stats",
     icon: BarChart3,

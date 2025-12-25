@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { scheduleEntryId, reason, urgency } = body
+    const { scheduleEntryId, changeType, targetShiftTypeId, reason, urgency } = body
 
     if (!scheduleEntryId) {
       return NextResponse.json(
@@ -98,22 +98,65 @@ export async function POST(request: Request) {
       )
     }
 
+    // Validar que si es SWAP, tenga turno destino
+    if (changeType === "SWAP" && !targetShiftTypeId) {
+      return NextResponse.json(
+        { error: "Debes seleccionar el turno al que quieres cambiar" },
+        { status: 400 }
+      )
+    }
+
+    // Si tiene turno destino, verificar que existe
+    if (targetShiftTypeId) {
+      const targetShift = await db.shiftType.findUnique({
+        where: { id: targetShiftTypeId },
+      })
+      if (!targetShift) {
+        return NextResponse.json(
+          { error: "Turno destino no válido" },
+          { status: 400 }
+        )
+      }
+    }
+
     // Crear la solicitud de cambio
     const changeRequest = await db.shiftChangeRequest.create({
       data: {
         requesterId: session.user.employeeId,
         scheduleEntryId,
+        changeType: changeType || "COVERAGE",
+        targetShiftTypeId: targetShiftTypeId || null,
         reason: reason || null,
         urgency: urgency || "MEDIUM",
-        status: "OPEN",
+        status: "PENDING", // Ahora requiere aprobación
       },
       include: {
-        requester: true,
+        requester: { include: { user: true } },
         scheduleEntry: {
           include: { shiftType: true },
         },
+        targetShiftType: true,
       },
     })
+
+    // Notificar a los administradores
+    const admins = await db.user.findMany({
+      where: { role: "ADMIN", status: "ACTIVE" },
+    })
+
+    const changeTypeText = changeType === "ABSENCE" ? "ausencia" : changeType === "SWAP" ? "cambio de turno" : "cobertura"
+
+    for (const admin of admins) {
+      await db.notification.create({
+        data: {
+          userId: admin.id,
+          type: "SHIFT_CHANGE_REQUEST",
+          title: "Nueva solicitud de cambio",
+          message: `${changeRequest.requester.firstName} ${changeRequest.requester.lastName} solicita ${changeTypeText} para el ${scheduleEntry.date.toLocaleDateString("es-ES")}`,
+          link: "/admin/changes",
+        },
+      })
+    }
 
     return NextResponse.json(changeRequest)
   } catch (error) {
