@@ -12,9 +12,10 @@ import {
   MessageSquare,
   ArrowLeftRight,
   Clock,
-  Home,
+  LayoutDashboard,
   ClipboardList,
-  Bell,
+  Sparkles,
+  ChevronRight,
 } from "lucide-react"
 import type { UserRole } from "@prisma/client"
 
@@ -27,13 +28,14 @@ interface NavItem {
   href: string
   icon: React.ComponentType<{ className?: string }>
   roles: UserRole[]
+  badge?: string
 }
 
 const navItems: NavItem[] = [
   {
-    title: "Inicio",
+    title: "Dashboard",
     href: "/dashboard",
-    icon: Home,
+    icon: LayoutDashboard,
     roles: ["WORKER", "SUPERVISOR", "ADMIN"],
   },
   {
@@ -43,13 +45,13 @@ const navItems: NavItem[] = [
     roles: ["WORKER", "SUPERVISOR"],
   },
   {
-    title: "Mis Preferencias",
+    title: "Preferencias",
     href: "/worker/preferences",
     icon: ClipboardList,
     roles: ["WORKER", "SUPERVISOR"],
   },
   {
-    title: "Cambios de Turno",
+    title: "Cambios",
     href: "/worker/changes",
     icon: ArrowLeftRight,
     roles: ["WORKER", "SUPERVISOR", "ADMIN"],
@@ -60,7 +62,9 @@ const navItems: NavItem[] = [
     icon: MessageSquare,
     roles: ["WORKER", "SUPERVISOR", "ADMIN"],
   },
-  // Admin items
+]
+
+const adminItems: NavItem[] = [
   {
     title: "Usuarios",
     href: "/admin/users",
@@ -80,12 +84,6 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
-    title: "Periodos",
-    href: "/admin/periods",
-    icon: Calendar,
-    roles: ["ADMIN"],
-  },
-  {
     title: "Estadísticas",
     href: "/admin/stats",
     icon: BarChart3,
@@ -102,75 +100,84 @@ const navItems: NavItem[] = [
 export function Sidebar({ userRole }: SidebarProps) {
   const pathname = usePathname()
 
-  const filteredItems = navItems.filter((item) => item.roles.includes(userRole))
-
-  // Separar items de worker y admin
-  const workerItems = filteredItems.filter(
-    (item) => !item.href.startsWith("/admin") || item.href === "/dashboard"
-  )
-  const adminItems = filteredItems.filter(
-    (item) => item.href.startsWith("/admin")
-  )
+  const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole))
+  const filteredAdminItems = adminItems.filter((item) => item.roles.includes(userRole))
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-card">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-72 flex-col border-r bg-gradient-to-b from-card via-card to-card/95 lg:flex">
       {/* Logo */}
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Calendar className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-bold">ShiftBalance</span>
-        </Link>
+      <div className="flex h-20 items-center gap-3 border-b px-6">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-emerald-600 shadow-lg shadow-primary/25">
+          <Sparkles className="h-6 w-6 text-white" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xl font-bold tracking-tight">ShiftBalance</span>
+          <span className="text-xs text-muted-foreground">Gestión de Turnos</span>
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 p-4">
-        {/* Worker items */}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">
+        {/* Main nav */}
         <div className="space-y-1">
-          {workerItems.map((item) => {
-            const isActive = pathname === item.href
+          {filteredNavItems.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                {item.title}
+                <item.icon className={cn(
+                  "h-5 w-5 transition-transform duration-200",
+                  !isActive && "group-hover:scale-110"
+                )} />
+                <span className="flex-1">{item.title}</span>
+                {isActive && (
+                  <ChevronRight className="h-4 w-4 opacity-70" />
+                )}
               </Link>
             )
           })}
         </div>
 
         {/* Admin section */}
-        {adminItems.length > 0 && (
+        {filteredAdminItems.length > 0 && (
           <>
-            <div className="my-4 border-t" />
-            <p className="mb-2 px-3 text-xs font-semibold uppercase text-muted-foreground">
-              Administración
-            </p>
+            <div className="my-4 flex items-center gap-3 px-4">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Admin
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
             <div className="space-y-1">
-              {adminItems.map((item) => {
-                const isActive = pathname === item.href
+              {filteredAdminItems.map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      "group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                       isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
                     )}
                   >
-                    <item.icon className="h-5 w-5" />
-                    {item.title}
+                    <item.icon className={cn(
+                      "h-5 w-5 transition-transform duration-200",
+                      !isActive && "group-hover:scale-110"
+                    )} />
+                    <span className="flex-1">{item.title}</span>
+                    {isActive && (
+                      <ChevronRight className="h-4 w-4 opacity-70" />
+                    )}
                   </Link>
                 )
               })}
@@ -178,6 +185,18 @@ export function Sidebar({ userRole }: SidebarProps) {
           </>
         )}
       </nav>
+
+      {/* Footer */}
+      <div className="border-t p-4">
+        <div className="rounded-xl bg-gradient-to-r from-primary/10 to-emerald-500/10 p-4">
+          <p className="text-xs font-medium text-foreground">
+            ShiftBalance v1.0
+          </p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Sistema de gestión de turnos
+          </p>
+        </div>
+      </div>
     </aside>
   )
 }
