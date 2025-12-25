@@ -17,10 +17,37 @@ import {
   Send,
 } from "lucide-react"
 import Link from "next/link"
+import { NewMessageDialog } from "@/components/messages/new-message-dialog"
 
 export default async function MessagesPage() {
   const session = await auth()
   if (!session?.user) redirect("/login")
+
+  // Obtener usuarios para el selector (excluyendo al usuario actual)
+  const users = await db.user.findMany({
+    where: {
+      id: { not: session.user.id },
+      status: "ACTIVE",
+    },
+    select: {
+      id: true,
+      email: true,
+      employeeProfile: {
+        select: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+    orderBy: { email: "asc" },
+  })
+
+  const usersForSelect = users.map((u) => ({
+    id: u.id,
+    email: u.email,
+    firstName: u.employeeProfile?.firstName,
+    lastName: u.employeeProfile?.lastName,
+  }))
 
   // Notificaciones
   const notifications = await db.notification.findMany({
@@ -79,15 +106,17 @@ export default async function MessagesPage() {
             {unreadNotifications + unreadMessages} sin leer
           </p>
         </div>
-        <Button>
-          <Send className="mr-2 h-4 w-4" />
-          Nuevo mensaje
-        </Button>
+        <NewMessageDialog users={usersForSelect}>
+          <Button className="rounded-xl bg-gradient-to-r from-primary to-emerald-600 shadow-lg shadow-primary/25">
+            <Send className="mr-2 h-4 w-4" />
+            Nuevo mensaje
+          </Button>
+        </NewMessageDialog>
       </div>
 
       <Tabs defaultValue="notifications" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="notifications" className="gap-2">
+        <TabsList className="rounded-xl">
+          <TabsTrigger value="notifications" className="gap-2 rounded-lg">
             <Bell className="h-4 w-4" />
             Notificaciones
             {unreadNotifications > 0 && (
@@ -96,7 +125,7 @@ export default async function MessagesPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="inbox" className="gap-2">
+          <TabsTrigger value="inbox" className="gap-2 rounded-lg">
             <Mail className="h-4 w-4" />
             Recibidos
             {unreadMessages > 0 && (
@@ -105,7 +134,7 @@ export default async function MessagesPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="sent" className="gap-2">
+          <TabsTrigger value="sent" className="gap-2 rounded-lg">
             <Send className="h-4 w-4" />
             Enviados
           </TabsTrigger>
@@ -113,14 +142,14 @@ export default async function MessagesPage() {
 
         {/* Notificaciones */}
         <TabsContent value="notifications">
-          <Card>
+          <Card className="rounded-2xl border shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Notificaciones</CardTitle>
                 <CardDescription>Avisos del sistema</CardDescription>
               </div>
               {unreadNotifications > 0 && (
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="rounded-xl">
                   Marcar todas como leídas
                 </Button>
               )}
@@ -128,14 +157,14 @@ export default async function MessagesPage() {
             <CardContent>
               <div className="divide-y">
                 {notifications.map((notification) => {
-                  const Icon = notificationIcons[notification.type] || Bell
+                  const Icon = notificationIcons[notification.type as keyof typeof notificationIcons] || Bell
                   return (
                     <div
                       key={notification.id}
-                      className={`py-4 flex gap-4 ${!notification.isRead ? "bg-primary/5 -mx-6 px-6" : ""}`}
+                      className={`py-4 flex gap-4 ${!notification.isRead ? "bg-primary/5 -mx-6 px-6 rounded-xl" : ""}`}
                     >
                       <div className="flex-shrink-0">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                           <Icon className="h-5 w-5 text-primary" />
                         </div>
                       </div>
@@ -143,7 +172,7 @@ export default async function MessagesPage() {
                         <div className="flex items-start justify-between gap-2">
                           <p className="font-medium">{notification.title}</p>
                           {!notification.isRead && (
-                            <Badge variant="info" className="flex-shrink-0">
+                            <Badge className="flex-shrink-0 bg-primary/10 text-primary border-0">
                               Nueva
                             </Badge>
                           )}
@@ -164,7 +193,7 @@ export default async function MessagesPage() {
                       </div>
                       {notification.link && (
                         <Link href={notification.link}>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" className="rounded-xl">
                             Ver
                           </Button>
                         </Link>
@@ -175,6 +204,7 @@ export default async function MessagesPage() {
 
                 {notifications.length === 0 && (
                   <div className="py-12 text-center text-muted-foreground">
+                    <Bell className="mx-auto h-12 w-12 text-muted-foreground/30 mb-4" />
                     No tienes notificaciones
                   </div>
                 )}
@@ -185,7 +215,7 @@ export default async function MessagesPage() {
 
         {/* Mensajes recibidos */}
         <TabsContent value="inbox">
-          <Card>
+          <Card className="rounded-2xl border shadow-sm">
             <CardHeader>
               <CardTitle>Mensajes recibidos</CardTitle>
               <CardDescription>Mensajes de compañeros y administradores</CardDescription>
@@ -204,21 +234,23 @@ export default async function MessagesPage() {
                   return (
                     <div
                       key={message.id}
-                      className={`py-4 flex gap-4 ${message.status === "UNREAD" ? "bg-primary/5 -mx-6 px-6" : ""}`}
+                      className={`py-4 flex gap-4 ${message.status === "UNREAD" ? "bg-primary/5 -mx-6 px-6 rounded-xl" : ""}`}
                     >
-                      <Avatar>
-                        <AvatarFallback>{initials}</AvatarFallback>
+                      <Avatar className="border-2 border-primary/20">
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-emerald-600 text-white">
+                          {initials}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-medium">{senderName}</p>
                             {message.subject && (
-                              <p className="text-sm font-medium">{message.subject}</p>
+                              <p className="text-sm font-medium text-muted-foreground">{message.subject}</p>
                             )}
                           </div>
                           {message.status === "UNREAD" && (
-                            <Badge variant="info">No leído</Badge>
+                            <Badge className="bg-primary/10 text-primary border-0">No leído</Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
@@ -239,6 +271,7 @@ export default async function MessagesPage() {
 
                 {receivedMessages.length === 0 && (
                   <div className="py-12 text-center text-muted-foreground">
+                    <Mail className="mx-auto h-12 w-12 text-muted-foreground/30 mb-4" />
                     No has recibido mensajes
                   </div>
                 )}
@@ -249,7 +282,7 @@ export default async function MessagesPage() {
 
         {/* Mensajes enviados */}
         <TabsContent value="sent">
-          <Card>
+          <Card className="rounded-2xl border shadow-sm">
             <CardHeader>
               <CardTitle>Mensajes enviados</CardTitle>
               <CardDescription>Mensajes que has enviado</CardDescription>
@@ -267,13 +300,15 @@ export default async function MessagesPage() {
 
                   return (
                     <div key={message.id} className="py-4 flex gap-4">
-                      <Avatar>
-                        <AvatarFallback>{initials}</AvatarFallback>
+                      <Avatar className="border-2 border-muted">
+                        <AvatarFallback className="bg-muted">
+                          {initials}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium">Para: {recipientName}</p>
                         {message.subject && (
-                          <p className="text-sm font-medium">{message.subject}</p>
+                          <p className="text-sm font-medium text-muted-foreground">{message.subject}</p>
                         )}
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                           {message.content}
@@ -298,6 +333,7 @@ export default async function MessagesPage() {
 
                 {sentMessages.length === 0 && (
                   <div className="py-12 text-center text-muted-foreground">
+                    <Send className="mx-auto h-12 w-12 text-muted-foreground/30 mb-4" />
                     No has enviado mensajes
                   </div>
                 )}
