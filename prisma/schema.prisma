@@ -1,0 +1,583 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  WORKER
+  SUPERVISOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ContractType {
+  FULL_TIME
+  PART_TIME
+  TEMPORARY
+}
+
+enum PeriodStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  LOCKED
+}
+
+enum ScheduleStatus {
+  DRAFT
+  PUBLISHED
+  LOCKED
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  OPEN
+  SELECTING
+  AWAITING_APPROVAL
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  REJECTED
+}
+
+enum OfferStatus {
+  PENDING
+  SELECTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum NotificationType {
+  SHIFT_CHANGE_REQUEST
+  COVERAGE_OFFER_RECEIVED
+  OFFER_SELECTED
+  SCHEDULE_PUBLISHED
+  PREFERENCE_DEADLINE
+  PERIOD_OPENED
+  CHANGE_APPROVAL_NEEDED
+  CHANGE_APPROVED
+  CHANGE_REJECTED
+  ADMIN_MESSAGE
+  SYSTEM
+}
+
+enum MessageStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  SUBMIT
+  APPROVE
+  REJECT
+  PUBLISH
+  LOCK
+  UNLOCK
+  GENERATE
+  EXPORT
+}
+
+enum RestrictionType {
+  NO_NIGHT_SHIFTS
+  NO_WEEKEND_SHIFTS
+  NO_PENALTY_SHIFTS
+  MAX_CONSECUTIVE_DAYS
+  MAX_HOURS_WEEK
+  INCOMPATIBLE_WITH_EMPLOYEE
+  REQUIRED_REST_HOURS
+  CUSTOM
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// ============================================
+// AUTH & USERS
+// ============================================
+
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  emailVerified   DateTime?
+  passwordHash    String?
+  role            UserRole   @default(WORKER)
+  status          UserStatus @default(ACTIVE)
+  lastLogin       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relaciones
+  employeeProfile   EmployeeProfile?
+  sessions          Session[]
+  accounts          Account[]
+  notifications     Notification[]
+  messagesSent      Message[]        @relation("MessageSender")
+  messagesReceived  Message[]        @relation("MessageRecipient")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// EMPLOYEE PROFILES
+// ============================================
+
+model EmployeeProfile {
+  id                     String       @id @default(cuid())
+  userId                 String       @unique
+  employeeCode           String?      @unique
+  firstName              String
+  lastName               String
+  hireDate               DateTime?
+  department             String?
+  position               String?
+  contractType           ContractType @default(FULL_TIME)
+  weeklyHours            Decimal      @default(40) @db.Decimal(4, 2)
+  isEligibleForPenalties Boolean      @default(true)
+  notes                  String?      @db.Text
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  // Relaciones
+  user                    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restrictions            EmployeeRestriction[]
+  preferenceEntries       PreferenceEntry[]
+  scheduleEntries         ScheduleEntry[]
+  scheduleEntriesOriginal ScheduleEntry[]       @relation("OriginalEmployee")
+  changeRequests          ShiftChangeRequest[]
+  coverageOffers          CoverageOffer[]
+  metrics                 EmployeeMetrics[]
+  deviationRecords        DeviationRecord[]
+
+  @@map("employee_profiles")
+}
+
+model EmployeeRestriction {
+  id              String          @id @default(cuid())
+  employeeId      String
+  restrictionType RestrictionType
+  value           Json            @default("{}")
+  reason          String?         @db.Text
+  validFrom       DateTime        @default(now()) @db.Date
+  validUntil      DateTime?       @db.Date
+  createdBy       String?
+  createdAt       DateTime        @default(now())
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_restrictions")
+}
+
+// ============================================
+// SHIFT CONFIGURATION
+// ============================================
+
+model ShiftType {
+  id            String  @id @default(cuid())
+  code          String  @unique
+  name          String
+  description   String? @db.Text
+  startTime     String? // HH:MM format
+  endTime       String? // HH:MM format
+  durationHours Decimal @default(0) @db.Decimal(4, 2)
+  color         String  @default("#3B82F6")
+  isPenalty     Boolean @default(false)
+  penaltyWeight Decimal @default(1) @db.Decimal(3, 2)
+  isActive      Boolean @default(true)
+  sortOrder     Int     @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relaciones
+  requirements      ShiftRequirement[]
+  preferenceEntries PreferenceEntry[]
+  scheduleEntries   ScheduleEntry[]
+
+  @@map("shift_types")
+}
+
+model ShiftRequirement {
+  id            String   @id @default(cuid())
+  shiftTypeId   String
+  dayOfWeek     Int?     // 0=Sunday, 6=Saturday, null=all days
+  isHoliday     Boolean  @default(false)
+  minEmployees  Int      @default(1)
+  maxEmployees  Int?
+  idealEmployees Int?
+  validFrom     DateTime @default(now()) @db.Date
+  validUntil    DateTime? @db.Date
+  createdAt     DateTime @default(now())
+
+  shiftType ShiftType @relation(fields: [shiftTypeId], references: [id], onDelete: Cascade)
+
+  @@map("shift_requirements")
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  name        String
+  isNational  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([date])
+  @@map("holidays")
+}
+
+// ============================================
+// PREFERENCES
+// ============================================
+
+model PreferencePeriod {
+  id        String       @id @default(cuid())
+  year      Int
+  month     Int          // 1-12
+  status    PeriodStatus @default(DRAFT)
+  opensAt   DateTime?
+  deadline  DateTime?
+  closedAt  DateTime?
+  createdBy String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  // Relaciones
+  entries PreferenceEntry[]
+
+  @@unique([year, month])
+  @@map("preference_periods")
+}
+
+model PreferenceEntry {
+  id              String   @id @default(cuid())
+  periodId        String
+  employeeId      String
+  date            DateTime @db.Date
+  shiftTypeId     String?
+  preferenceLevel Int      @default(50) // 0, 25, 50, 75, 100
+  notes           String?  @db.Text
+  submittedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relaciones
+  period    PreferencePeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employee  EmployeeProfile  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftType ShiftType?       @relation(fields: [shiftTypeId], references: [id])
+
+  @@unique([periodId, employeeId, date, shiftTypeId])
+  @@map("preference_entries")
+}
+
+// ============================================
+// SCHEDULES
+// ============================================
+
+model SchedulePeriod {
+  id               String         @id @default(cuid())
+  year             Int
+  month            Int
+  status           ScheduleStatus @default(DRAFT)
+  generatedAt      DateTime?
+  publishedAt      DateTime?
+  lockedAt         DateTime?
+  generatedBy      String?
+  publishedBy      String?
+  generationConfig Json           @default("{}")
+  notes            String?        @db.Text
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relaciones
+  entries ScheduleEntry[]
+
+  @@unique([year, month])
+  @@map("schedule_periods")
+}
+
+model ScheduleEntry {
+  id                 String   @id @default(cuid())
+  schedulePeriodId   String
+  employeeId         String
+  date               DateTime @db.Date
+  shiftTypeId        String
+  isLocked           Boolean  @default(false)
+  isManualOverride   Boolean  @default(false)
+  overrideReason     String?  @db.Text
+  originalEmployeeId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relaciones
+  schedulePeriod   SchedulePeriod       @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  employee         EmployeeProfile      @relation(fields: [employeeId], references: [id])
+  shiftType        ShiftType            @relation(fields: [shiftTypeId], references: [id])
+  originalEmployee EmployeeProfile?     @relation("OriginalEmployee", fields: [originalEmployeeId], references: [id])
+  changeRequests   ShiftChangeRequest[]
+  deviationRecords DeviationRecord[]
+
+  @@unique([schedulePeriodId, employeeId, date])
+  @@map("schedule_entries")
+}
+
+// ============================================
+// SHIFT CHANGES
+// ============================================
+
+model ShiftChangeRequest {
+  id              String              @id @default(cuid())
+  requesterId     String
+  scheduleEntryId String
+  status          ChangeRequestStatus @default(PENDING)
+  reason          String?             @db.Text
+  urgency         UrgencyLevel        @default(MEDIUM)
+  validUntil      DateTime?
+  autoSelect      Boolean             @default(false)
+  adminNotes      String?             @db.Text
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Relaciones
+  requester     EmployeeProfile     @relation(fields: [requesterId], references: [id])
+  scheduleEntry ScheduleEntry       @relation(fields: [scheduleEntryId], references: [id])
+  offers        CoverageOffer[]
+  result        ShiftChangeResult?
+  approvals     ChangeApproval[]
+
+  @@map("shift_change_requests")
+}
+
+model CoverageOffer {
+  id           String      @id @default(cuid())
+  requestId    String
+  offererId    String
+  status       OfferStatus @default(PENDING)
+  scoreAtOffer Decimal?    @db.Decimal(6, 2)
+  conditions   String?     @db.Text
+  offeredAt    DateTime    @default(now())
+  resolvedAt   DateTime?
+
+  // Relaciones
+  request ShiftChangeRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  offerer EmployeeProfile     @relation(fields: [offererId], references: [id])
+  result  ShiftChangeResult?
+
+  @@unique([requestId, offererId])
+  @@map("coverage_offers")
+}
+
+model ChangeApproval {
+  id         String   @id @default(cuid())
+  requestId  String
+  approverId String   // UserId del aprobador
+  approverRole String // REQUESTER, OFFERER, ADMIN
+  approved   Boolean
+  comments   String?  @db.Text
+  approvedAt DateTime @default(now())
+
+  request ShiftChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, approverRole])
+  @@map("change_approvals")
+}
+
+model ShiftChangeResult {
+  id                    String   @id @default(cuid())
+  requestId             String   @unique
+  selectedOfferId       String   @unique
+  approvedBy            String?
+  executedAt            DateTime @default(now())
+  originalEntrySnapshot Json
+  notes                 String?  @db.Text
+
+  request       ShiftChangeRequest @relation(fields: [requestId], references: [id])
+  selectedOffer CoverageOffer      @relation(fields: [selectedOfferId], references: [id])
+
+  @@map("shift_change_results")
+}
+
+// ============================================
+// METRICS
+// ============================================
+
+model EmployeeMetrics {
+  id                     String   @id @default(cuid())
+  employeeId             String
+  year                   Int
+  month                  Int
+  totalShifts            Int      @default(0)
+  penaltyShifts          Int      @default(0)
+  penaltyWeightSum       Decimal  @default(0) @db.Decimal(8, 2)
+  weekendShifts          Int      @default(0)
+  holidayShifts          Int      @default(0)
+  preferenceDeviation    Decimal  @default(0) @db.Decimal(5, 2)
+  preferencesSatisfiedPct Decimal @default(0) @db.Decimal(5, 2)
+  changesRequested       Int      @default(0)
+  changesReceived        Int      @default(0)
+  offersMade             Int      @default(0)
+  offersSelected         Int      @default(0)
+  offersRejected         Int      @default(0)
+  collaborationScore     Decimal  @default(0) @db.Decimal(6, 2)
+  loadScore              Decimal  @default(0) @db.Decimal(6, 2)
+  fairnessScore          Decimal  @default(0) @db.Decimal(6, 2)
+  compositeScore         Decimal  @default(0) @db.Decimal(6, 2)
+  calculatedAt           DateTime @default(now())
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year, month])
+  @@map("employee_metrics")
+}
+
+model DeviationRecord {
+  id                String   @id @default(cuid())
+  employeeId        String
+  scheduleEntryId   String
+  preferenceEntryId String?
+  preferredLevel    Int?
+  deviationValue    Decimal  @db.Decimal(5, 2)
+  createdAt         DateTime @default(now())
+
+  employee      EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  scheduleEntry ScheduleEntry   @relation(fields: [scheduleEntryId], references: [id], onDelete: Cascade)
+
+  @@map("deviation_records")
+}
+
+// ============================================
+// NOTIFICATIONS & MESSAGING
+// ============================================
+
+model Notification {
+  id                String           @id @default(cuid())
+  userId            String
+  type              NotificationType
+  title             String
+  message           String?          @db.Text
+  link              String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  isRead            Boolean          @default(false)
+  readAt            DateTime?
+  emailSent         Boolean          @default(false)
+  emailSentAt       DateTime?
+  createdAt         DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  senderId    String
+  recipientId String
+  subject     String?
+  content     String        @db.Text
+  status      MessageStatus @default(UNREAD)
+  readAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  sender    User @relation("MessageSender", fields: [senderId], references: [id])
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id])
+
+  @@index([recipientId, status])
+  @@map("messages")
+}
+
+// ============================================
+// AUDIT & SYSTEM CONFIG
+// ============================================
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  timestamp  DateTime    @default(now())
+  userId     String?
+  action     AuditAction
+  entityType String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?     @db.Text
+  metadata   Json        @default("{}")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model SystemConfig {
+  key         String   @id
+  value       Json
+  description String?  @db.Text
+  updatedBy   String?
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@map("system_config")
+}
