@@ -27,8 +27,8 @@ import { useToast } from "@/hooks/use-toast"
 interface User {
   id: string
   email: string
-  firstName?: string
-  lastName?: string
+  firstName?: string | null
+  lastName?: string | null
 }
 
 interface NewMessageDialogProps {
