@@ -25,7 +25,7 @@ export default async function DashboardPage() {
   const currentYear = currentDate.getFullYear()
 
   // Optimized parallel queries
-  const [nextShift, pendingChanges, monthlyShifts, adminData] = await Promise.all([
+  const [nextShift, pendingChanges, monthlyShifts, notifications, adminData] = await Promise.all([
     session.user.employeeId
       ? db.scheduleEntry.findFirst({
           where: {
@@ -51,6 +51,11 @@ export default async function DashboardPage() {
           },
         })
       : 0,
+    db.notification.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
     isAdmin
       ? Promise.all([
           db.user.count({ where: { status: "ACTIVE" } }),
@@ -61,6 +66,8 @@ export default async function DashboardPage() {
         ])
       : [0, 0, 0],
   ])
+
+  const unreadNotifications = notifications.filter((n) => !n.isRead).length
 
   const greeting = () => {
     const hour = new Date().getHours()
@@ -169,13 +176,77 @@ export default async function DashboardPage() {
             <Bell className="h-5 w-5 text-orange-600 dark:text-orange-400" />
           </div>
           <p className="text-sm font-medium text-muted-foreground">Notificaciones</p>
-          <p className="mt-2 text-3xl font-bold">0</p>
+          <p className="mt-2 text-3xl font-bold">{unreadNotifications}</p>
           <p className="mt-1 text-sm text-muted-foreground">
             sin leer
           </p>
           <ChevronRight className="absolute bottom-4 right-4 h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
         </Link>
       </div>
+
+      {/* Recent Notifications */}
+      {notifications.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-1 rounded-full bg-orange-500" />
+              <h2 className="text-xl font-bold">Notificaciones recientes</h2>
+            </div>
+            <Link
+              href="/worker/messages"
+              className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+            >
+              Ver todas
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="rounded-2xl border bg-card shadow-sm divide-y">
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`p-4 flex gap-4 ${!notification.isRead ? "bg-primary/5" : ""}`}
+              >
+                <div className="flex-shrink-0">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/50">
+                    <Bell className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium">{notification.title}</p>
+                    {!notification.isRead && (
+                      <span className="inline-flex items-center rounded-lg bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        Nueva
+                      </span>
+                    )}
+                  </div>
+                  {notification.message && (
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                      {notification.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {notification.createdAt.toLocaleDateString("es-ES", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                {notification.link && (
+                  <Link
+                    href={notification.link}
+                    className="flex-shrink-0 self-center"
+                  >
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Admin Panel */}
       {isAdmin && (

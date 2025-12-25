@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Sparkles,
   ChevronRight,
+  Palmtree,
 } from "lucide-react"
 import type { UserRole } from "@prisma/client"
 
@@ -55,6 +56,12 @@ const navItems: NavItem[] = [
     href: "/worker/changes",
     icon: ArrowLeftRight,
     roles: ["WORKER", "SUPERVISOR", "ADMIN"],
+  },
+  {
+    title: "Vacaciones",
+    href: "/worker/vacations",
+    icon: Palmtree,
+    roles: ["WORKER", "SUPERVISOR"],
   },
   {
     title: "Mensajes",

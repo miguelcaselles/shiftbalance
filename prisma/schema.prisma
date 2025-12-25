@@ -73,6 +73,10 @@ enum NotificationType {
   CHANGE_REJECTED
   ADMIN_MESSAGE
   SYSTEM
+  VACATION_REQUEST
+  VACATION_APPROVED
+  VACATION_REJECTED
+  MESSAGE_REPLY
 }
 
 enum MessageStatus {
@@ -95,6 +99,13 @@ enum AuditAction {
   UNLOCK
   GENERATE
   EXPORT
+}
+
+enum VacationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum RestrictionType {
@@ -211,6 +222,8 @@ model EmployeeProfile {
   coverageOffers          CoverageOffer[]
   metrics                 EmployeeMetrics[]
   deviationRecords        DeviationRecord[]
+  vacationBalances        VacationBalance[]
+  vacationRequests        VacationRequest[]
 
   @@map("employee_profiles")
 }
@@ -538,13 +551,58 @@ model Message {
   content     String        @db.Text
   status      MessageStatus @default(UNREAD)
   readAt      DateTime?
+  parentId    String?       // For conversation threads
   createdAt   DateTime      @default(now())
 
-  sender    User @relation("MessageSender", fields: [senderId], references: [id])
-  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id])
+  sender    User      @relation("MessageSender", fields: [senderId], references: [id])
+  recipient User      @relation("MessageRecipient", fields: [recipientId], references: [id])
+  parent    Message?  @relation("MessageThread", fields: [parentId], references: [id])
+  replies   Message[] @relation("MessageThread")
 
   @@index([recipientId, status])
+  @@index([parentId])
   @@map("messages")
+}
+
+// ============================================
+// VACATION MANAGEMENT
+// ============================================
+
+model VacationBalance {
+  id              String   @id @default(cuid())
+  employeeId      String
+  year            Int
+  totalDays       Int      @default(22)
+  usedDays        Int      @default(0)
+  pendingDays     Int      @default(0)
+  carriedOverDays Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year])
+  @@map("vacation_balances")
+}
+
+model VacationRequest {
+  id          String                @id @default(cuid())
+  employeeId  String
+  startDate   DateTime              @db.Date
+  endDate     DateTime              @db.Date
+  totalDays   Int
+  reason      String?               @db.Text
+  status      VacationRequestStatus @default(PENDING)
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  reviewNotes String?               @db.Text
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, status])
+  @@map("vacation_requests")
 }
 
 // ============================================

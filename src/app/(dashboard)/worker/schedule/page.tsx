@@ -4,9 +4,9 @@ import { db } from "@/lib/db"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, ArrowLeftRight } from "lucide-react"
 import Link from "next/link"
-import { MonthCalendar } from "@/components/calendar/month-calendar"
+import { InteractiveCalendar } from "@/components/schedule/interactive-calendar"
 import { getMonthName } from "@/lib/utils"
 
 interface PageProps {
@@ -45,8 +45,9 @@ export default async function WorkerSchedulePage({ searchParams }: PageProps) {
   const nextMonth = month === 12 ? 1 : month + 1
   const nextYear = month === 12 ? year + 1 : year
 
-  // Formatear entradas para el calendario
+  // Formatear entradas para el calendario interactivo
   const calendarEntries = entries.map((entry) => ({
+    id: entry.id,
     date: entry.date,
     shiftType: {
       code: entry.shiftType.code,
@@ -166,9 +167,14 @@ export default async function WorkerSchedulePage({ searchParams }: PageProps) {
         </Card>
       </div>
 
-      {/* Calendario */}
+      {/* Calendario Interactivo */}
       {schedulePeriod?.status === "PUBLISHED" || schedulePeriod?.status === "LOCKED" ? (
-        <MonthCalendar year={year} month={month} entries={calendarEntries} />
+        <InteractiveCalendar
+          year={year}
+          month={month}
+          entries={calendarEntries}
+          allowChangeRequests={schedulePeriod?.status === "PUBLISHED"}
+        />
       ) : (
         <Card>
           <CardContent className="py-12 text-center">

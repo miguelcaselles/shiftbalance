@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { recipientId, subject, content } = body
+    const { recipientId, subject, content, parentId } = body
 
     if (!recipientId || !content) {
       return NextResponse.json(
@@ -89,6 +89,19 @@ export async function POST(request: Request) {
       )
     }
 
+    // Si es respuesta, verificar que el mensaje padre existe
+    if (parentId) {
+      const parentMessage = await db.message.findUnique({
+        where: { id: parentId },
+      })
+      if (!parentMessage) {
+        return NextResponse.json(
+          { error: "Mensaje original no encontrado" },
+          { status: 404 }
+        )
+      }
+    }
+
     // Crear mensaje
     const message = await db.message.create({
       data: {
@@ -97,6 +110,7 @@ export async function POST(request: Request) {
         subject: subject || null,
         content,
         status: "UNREAD",
+        parentId: parentId || null,
       },
       include: {
         sender: {
@@ -125,9 +139,12 @@ export async function POST(request: Request) {
     await db.notification.create({
       data: {
         userId: recipientId,
-        type: "ADMIN_MESSAGE",
-        title: "Nuevo mensaje",
-        message: `Has recibido un mensaje de ${senderName}`,
+        type: parentId ? "MESSAGE_REPLY" : "ADMIN_MESSAGE",
+        title: parentId ? "Nueva respuesta" : "Nuevo mensaje",
+        message: parentId
+          ? `${senderName} ha respondido a tu mensaje`
+          : `Has recibido un mensaje de ${senderName}`,
+        link: "/worker/messages",
       },
     })
 

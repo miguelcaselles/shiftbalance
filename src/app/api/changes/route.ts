@@ -70,9 +70,9 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { scheduleEntryId, reason, urgency } = body
 
-    if (!scheduleEntryId || !reason) {
+    if (!scheduleEntryId) {
       return NextResponse.json(
-        { error: "Faltan campos requeridos" },
+        { error: "Falta el turno a cambiar" },
         { status: 400 }
       )
     }
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       data: {
         requesterId: session.user.employeeId,
         scheduleEntryId,
-        reason,
+        reason: reason || null,
         urgency: urgency || "MEDIUM",
         status: "OPEN",
       },
